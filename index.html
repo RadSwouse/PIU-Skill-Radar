@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skill Radar — Pump It Up Phoenix 2</title>
+<meta name="description" content="A skill radar for Pump It Up Phoenix 2: a decimal level for each technique, from your scores and ArcadeStat's community tags.">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Skill Radar</h1>
+      <div class="sub" id="sub">Pump It Up Phoenix 2</div>
+    </div>
+    <div class="seg" role="group" aria-label="Play style" id="seg">
+      <button type="button" id="btn-single" aria-pressed="false">Single</button>
+      <button type="button" id="btn-double" aria-pressed="true">Double</button>
+    </div>
+  </header>
+
+  <div class="card hero" id="hero">
+    <h2>See your skill radar</h2>
+    <p>Load your Phoenix 2 scores below. Each technique gets a decimal level based on the hardest charts with that tech you've cleared, and how well you scored on them.</p>
+  </div>
+
+  <div id="app">
+    <div class="main">
+      <div class="card radar-card" id="radar-card">
+        <svg id="radar" viewBox="0 0 560 540" role="img" aria-labelledby="radar-title"><title id="radar-title">Skill radar</title></svg>
+        <div class="tip" id="tip" role="status"></div>
+      </div>
+      <div class="card list-card">
+        <div class="list-head"><span>Skill</span><span>Level</span></div>
+        <div id="list" role="listbox" aria-label="Skills"></div>
+      </div>
+    </div>
+    <div class="card detail" id="detail"></div>
+  </div>
+
+  <div class="lower">
+    <div class="card panel data-panel">
+      <h3>Your scores</h3>
+      <p>Connect your <a href="https://piuscores.arroweclip.se" target="_blank" rel="noopener">PIU Scores</a> account with its API token (on your PIU Scores account page). Your token is only sent to PIU Scores, and it's only saved if you tick "Remember".</p>
+      <form id="piu-form" autocomplete="off">
+        <div class="field">
+          <label class="sr" for="token" style="position:absolute;left:-9999px">PIU Scores API token</label>
+          <input type="password" id="token" placeholder="PIU Scores API token" spellcheck="false">
+          <button type="submit" class="btn primary" id="load">Load my scores</button>
+        </div>
+        <label class="check"><input type="checkbox" id="remember"> Remember on this device</label>
+      </form>
+      <div class="status" id="status" aria-live="polite"></div>
+      <div id="unmatched"></div>
+      <div class="btn-row" id="data-actions"></div>
+      <div class="sep"></div>
+      <p><b>Or use ArcadeStat:</b> on a computer, export a HAR from your arcadestat.app Records page (Network tab, Fetch/XHR, after a reload) and drop it here.</p>
+      <div class="drop" id="drop">Drop a .har or .json file here, or <label style="text-decoration:underline;cursor:pointer">choose a file<input type="file" id="file" accept=".har,.json,application/json" hidden></label></div>
+    </div>
+    <div class="card panel">
+      <h3>How each level is calculated</h3>
+      <ol>
+        <li><b>Chart level</b> = the chart's level + its ArcadeStat tier vote (Top ≈ +1.25 … Bottom ≈ −0.25).</li>
+        <li><b>Score adjustment</b> = weighted around SS ±0 (SSS+ = +0.15 … A = −1.6).</li>
+        <li><b>Side-tech discount</b>: a chart counts lower for a tech it only has a little of. Value = level + adjustment − discount × (1 − tech share), where share is the tech's vote weight divided by the chart's top tag. The discount is 3 levels for common techs and smaller for rare ones (3 × tagged Lv18+ charts ÷ 50).</li>
+        <li><b>Your level</b> = weighted average of your best values filling 10 slots. A value above 22 fills extra slots (1 + every level above 22), so hard clears weigh more.</li>
+        <li>A skill appears once you have <b>5 qualifying clears</b>: charts where the tech is at least 25% of the top tag (any amount for rare techs).</li>
+      </ol>
+      <p style="font-size:13px">Technique tags and tier votes come from the <a href="https://arcadestat.app" target="_blank" rel="noopener">ArcadeStat</a> community. Scores come from <a href="https://piuscores.arroweclip.se" target="_blank" rel="noopener">PIU Scores</a> or your ArcadeStat export. Clears only; stage breaks don't count.</p>
+    </div>
+  </div>
+</div>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
