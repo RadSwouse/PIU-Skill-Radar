@@ -143,6 +143,41 @@ try {
       if (a == null || b == null) return true; return m >= Math.min(a, b) - 1e-9 && m <= Math.max(a, b) + 1e-9; });
   });
   check(between, 'in-between frames sit between the neighbouring days');
+  // A skill getting its first level starts on the radar outline (between its rated neighbours)
+  // and moves steadily to its level, in both play styles.
+  const appearCheck = () => pg.evaluate(() => {
+    const S = window.__skillRadar, H = S.history, { lo, hi } = S.scale();
+    const mode = document.body.classList.contains('mode-single') ? 'Single' : 'Double';
+    const names = Object.keys(H[mode]), n = names.length, ts = H.dates.map(d => Date.parse(d + 'T00:00:00Z'));
+    const rn = v => Math.max(0, Math.min(1, (v - lo) / (hi - lo))), ang = j => -Math.PI / 2 + j * 2 * Math.PI / n;
+    const pt = (j, v) => [rn(v) * Math.cos(ang(j)), rn(v) * Math.sin(ang(j))];
+    let events = 0, onLine = 0; const bad = [];
+    for (let i = 0; i < ts.length - 1; i++) names.forEach((sk, k) => {
+      const a = H[mode][sk][i], b = H[mode][sk][i + 1];
+      if (a != null || b == null) return;
+      const rated = names.map((x, j) => j).filter(j => H[mode][names[j]][i] != null);
+      if (rated.length < 3) return;                                   // no outline yet
+      events++;
+      let p = k, q = k;
+      do { p = (p - 1 + n) % n; } while (H[mode][names[p]][i] == null);
+      do { q = (q + 1) % n; } while (H[mode][names[q]][i] == null);
+      const gapSum = ((k - p + n) % n) + ((q - k + n) % n);
+      const v0 = S.replayValuesAt(ts[i] + (ts[i + 1] - ts[i]) * 1e-6)[sk].level;
+      const vm = S.replayValuesAt(ts[i] + (ts[i + 1] - ts[i]) * 0.5)[sk].level;
+      const P = pt(p, H[mode][names[p]][i]), Q = pt(q, H[mode][names[q]][i]), X = pt(k, v0);
+      const cross = (Q[0] - P[0]) * (X[1] - P[1]) - (Q[1] - P[1]) * (X[0] - P[0]);
+      if (gapSum < n / 2) { if (Math.abs(cross) < 1e-4) onLine++; else bad.push(`${H.dates[i]} ${sk} off the outline`); }
+      if (!(vm >= Math.min(v0, b) - 1e-9 && vm <= Math.max(v0, b) + 1e-9)) bad.push(`${H.dates[i]} ${sk} overshoots`);
+    });
+    return { events, onLine, bad };
+  });
+  const dApp = await appearCheck();
+  check(dApp.events > 0 && dApp.bad.length === 0, `Double: new skills start on the outline and move to their level (${dApp.onLine}/${dApp.events} on an edge)${dApp.bad.length ? ': ' + dApp.bad.slice(0, 4) : ''}`);
+  await pg.click('#btn-single');
+  const sApp = await appearCheck();
+  check(sApp.events > 0 && sApp.bad.length === 0, `Single: new skills start on the outline and move to their level (${sApp.onLine}/${sApp.events} on an edge)${sApp.bad.length ? ': ' + sApp.bad.slice(0, 4) : ''}`);
+  await pg.click('#btn-double');
+
   await pg.focus('#timeline'); await pg.keyboard.press('Home');
   check(/Play day 1 of \d+/.test(await pg.textContent('#replay-day')), 'Home jumps to the first play day');
   await pg.keyboard.press('ArrowRight'); await pg.keyboard.press('ArrowRight');

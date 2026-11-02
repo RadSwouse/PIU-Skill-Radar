@@ -252,8 +252,32 @@ let catMap = null;
 const replayTimes = () => histData.dates.map(tOf);
 const longDate = t => new Date(t).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
 
+// Where a not-yet-rated spoke crosses the radar outline on play day i, as a level. A new skill
+// starts there, so it appears on the existing shape instead of pinching it from the centre.
+function outlineCrossing(H, i, k, skills, lo, hi) {
+  const n = skills.length, span = hi - lo;
+  const rn = v => Math.max(0, Math.min(1, (v - lo) / span));
+  const rated = j => H[skills[j]][i] != null;
+  let p = -1, q = -1;
+  for (let s = 1; s < n; s++) { const j = (k - s + n) % n; if (rated(j)) { p = j; break; } }
+  for (let s = 1; s < n; s++) { const j = (k + s) % n; if (rated(j)) { q = j; break; } }
+  if (p < 0 || p === q) return lo;                       // no outline to sit on yet
+  const ang = j => -Math.PI / 2 + j * 2 * Math.PI / n;
+  const r1 = rn(H[skills[p]][i]), r2 = rn(H[skills[q]][i]);
+  const P = [r1 * Math.cos(ang(p)), r1 * Math.sin(ang(p))], Q = [r2 * Math.cos(ang(q)), r2 * Math.sin(ang(q))];
+  const d = [Math.cos(ang(k)), Math.sin(ang(k))], E = [Q[0] - P[0], Q[1] - P[1]];
+  const cross = (a, b) => a[0] * b[1] - a[1] * b[0], den = cross(d, E);
+  if (Math.abs(den) > 1e-12) {
+    const dist = cross(P, E) / den, tt = cross(P, d) / den;   // ray length, position along the edge
+    if (dist >= 0 && tt >= -1e-9 && tt <= 1 + 1e-9) return lo + dist * span;
+  }
+  // the neighbours span half the circle or more: blend their radii by angle instead
+  const gap = (a, b) => ((b - a + n) % n) || n, w = gap(p, k) / (gap(p, k) + gap(k, q));
+  return lo + (r1 + (r2 - r1) * w) * span;
+}
+
 // Radar values at time t: exact on each play day, eased between them. A skill that gets its first
-// level grows out from the centre over the days leading up to it.
+// level starts on the radar outline and moves in or out to its level.
 function replayValues(t) {
   const ts = replayTimes(), H = histData[mode], last = ts.length - 1, skills = {};
   let i = 0;
@@ -261,15 +285,17 @@ function replayValues(t) {
   const span = i < last ? ts[i + 1] - ts[i] : 1;
   const f = i < last ? Math.max(0, Math.min(1, (t - ts[i]) / span)) : 0;
   const e = reduceMotion() ? 0 : f * f * (3 - 2 * f);
-  const { lo } = radarScale();
-  for (const sk of SPOKES[mode]) {
+  const { lo, hi } = radarScale(), skillList = SPOKES[mode];
+  skillList.forEach((sk, k) => {
     const a = H[sk][i], b = i < last ? H[sk][i + 1] : a;
     let v;
     if (a != null && b != null) v = a + (b - a) * e;
-    else if (a == null && b != null) v = e > 0 ? lo + (b - lo) * e : null;
+    else if (a == null && b != null) {
+      if (e > 0) { const v0 = outlineCrossing(H, i, k, skillList, lo, hi); v = v0 + (b - v0) * e; } else v = null;
+    }
     else v = a;
     skills[sk] = { level: v, qualifying: 0 };
-  }
+  });
   return { skills, dayIndex: i };
 }
 
@@ -509,4 +535,4 @@ async function start() {
 }
 start();
 window.__skillRadar = { get result() { return result; }, get history() { return histData; }, get data() { return data; },
-  replayValuesAt: t => replayValues(t).skills, get replay() { return { open: replay.open, playing: replay.playing, t: replay.t }; } };
+  replayValuesAt: t => replayValues(t).skills, scale: () => radarScale(), get replay() { return { open: replay.open, playing: replay.playing, t: replay.t }; } };
