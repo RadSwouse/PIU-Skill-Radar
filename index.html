@@ -26,13 +26,37 @@
   </div>
 
   <div id="app">
+    <div class="card replay" id="replay">
+      <button type="button" class="replay-toggle" id="replay-toggle" aria-expanded="false" aria-controls="replay-body">
+        <span class="chev" aria-hidden="true">›</span> Watch radar progress over time
+      </button>
+      <div id="replay-body" hidden>
+        <p class="replay-hint"><b>Drag or click</b> the timeline to move in time. When it has focus, use the arrow keys to step between play days.</p>
+        <svg id="timeline" viewBox="0 0 1000 92" role="slider" tabindex="0" aria-label="Replay date"></svg>
+        <div class="replay-row">
+          <div class="replay-now">
+            <div class="replay-k">Replay date</div>
+            <div class="replay-date" id="replay-date"></div>
+            <div class="replay-k" id="replay-day"></div>
+          </div>
+          <div class="replay-controls">
+            <button type="button" class="btn primary replay-play" id="replay-play"><span aria-hidden="true">▶ </span>Play replay</button>
+            <label class="replay-speed">Speed
+              <select id="replay-speed">
+                <option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option>
+              </select>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
     <div class="main">
       <div class="card radar-card" id="radar-card">
         <svg id="radar" viewBox="0 0 560 540" role="img" aria-labelledby="radar-title"><title id="radar-title">Skill radar</title></svg>
         <div class="tip" id="tip" role="status"></div>
       </div>
       <div class="card list-card">
-        <div class="list-head"><span>Skill</span><span>Level</span></div>
+        <div class="list-head"><span>Skill</span><span id="list-level-head">Level</span></div>
         <div id="list" role="listbox" aria-label="Skills"></div>
       </div>
     </div>

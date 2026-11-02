@@ -40,18 +40,14 @@ function render() {
   if (!selected || !res.skills[selected]) {
     selected = shown.slice().sort((a, b) => res.skills[b].level - res.skills[a].level)[0] || skills[0];
   }
-  drawRadar(res, skills);
+  if (replay.open) { drawTimeline(); drawReplayFrame(); } else drawRadar(res, skills);
+  $('list-level-head').textContent = replay.open ? 'Now' : 'Level';
   drawList(res, skills);
   drawDetail(res);
 }
 
-function drawRadar(res, skills) {
-  const svg = $('radar');
-  while (svg.lastChild && svg.lastChild.nodeName !== 'title') svg.removeChild(svg.lastChild);
-  const narrow = (svg.clientWidth || 560) < 520;
-  svg.classList.toggle('narrow', narrow);
-  const cx = 280, cy = 268, R = narrow ? 142 : 178, n = skills.length;
-  // one scale for both play styles so Single and Double shapes compare directly
+// One scale for both play styles (and every replay frame) so shapes compare directly.
+function radarScale() {
   const vals = [];
   for (const m of Object.keys(SPOKES)) for (const s of SPOKES[m]) { const v = result[m].skills[s].level; if (v != null) vals.push(v); }
   let lo = 12, hi = 24;
@@ -59,6 +55,16 @@ function drawRadar(res, skills) {
     lo = Math.max(0, Math.min(12, Math.floor((Math.min(...vals) - 2) / 4) * 4));
     hi = Math.max(lo + 8, Math.ceil((Math.max(...vals) + 1) / 4) * 4);
   }
+  return { lo, hi };
+}
+
+function drawRadar(res, skills, inReplay = false) {
+  const svg = $('radar');
+  while (svg.lastChild && svg.lastChild.nodeName !== 'title') svg.removeChild(svg.lastChild);
+  const narrow = (svg.clientWidth || 560) < 520;
+  svg.classList.toggle('narrow', narrow);
+  const cx = 280, cy = 268, R = narrow ? 142 : 178, n = skills.length;
+  const { lo, hi } = radarScale();
   const rad = v => R * Math.max(0, Math.min(1, (v - lo) / (hi - lo)));
   const ang = i => -Math.PI / 2 + i * 2 * Math.PI / n;
   const pt = (i, r) => [cx + r * Math.cos(ang(i)), cy + r * Math.sin(ang(i))];
@@ -110,7 +116,7 @@ function drawRadar(res, skills) {
     const t1 = el('text', { x, y: y + dy, 'text-anchor': anchor, class: 'ax-name' + (off ? ' off' : '') + (s === selected ? ' sel' : '') }, lg);
     t1.textContent = s;
     const t2 = el('text', { x, y: y + dy + (narrow ? 22 : 15), 'text-anchor': anchor, class: 'ax-val' + (off ? ' off' : '') }, lg);
-    t2.textContent = off ? `${d.qualifying}/${MIN_CLEARS} clears` : fmt(d.level, 1);
+    t2.textContent = off ? (inReplay ? '—' : `${d.qualifying}/${MIN_CLEARS} clears`) : fmt(d.level, 1);
     lg.addEventListener('click', () => select(s));
   });
 }
@@ -238,6 +244,138 @@ function drawHistory(box, d) {
 }
 
 
+// ---------- replay ----------
+const DAY = 86400000, DAYS_PER_SECOND = 4;
+const reduceMotion = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const replay = { open: false, playing: false, t: 0, speed: 1, raf: 0, last: 0, dragging: false };
+let catMap = null;
+const replayTimes = () => histData.dates.map(tOf);
+const longDate = t => new Date(t).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
+
+// Radar values at time t: exact on each play day, eased between them. A skill that gets its first
+// level grows out from the centre over the days leading up to it.
+function replayValues(t) {
+  const ts = replayTimes(), H = histData[mode], last = ts.length - 1, skills = {};
+  let i = 0;
+  while (i < last && ts[i + 1] <= t) i++;
+  const span = i < last ? ts[i + 1] - ts[i] : 1;
+  const f = i < last ? Math.max(0, Math.min(1, (t - ts[i]) / span)) : 0;
+  const e = reduceMotion() ? 0 : f * f * (3 - 2 * f);
+  const { lo } = radarScale();
+  for (const sk of SPOKES[mode]) {
+    const a = H[sk][i], b = i < last ? H[sk][i + 1] : a;
+    let v;
+    if (a != null && b != null) v = a + (b - a) * e;
+    else if (a == null && b != null) v = e > 0 ? lo + (b - lo) * e : null;
+    else v = a;
+    skills[sk] = { level: v, qualifying: 0 };
+  }
+  return { skills, dayIndex: i };
+}
+
+function drawReplayFrame() {
+  const frame = replayValues(replay.t);
+  drawRadar(frame, SPOKES[mode], true);
+  const dates = histData.dates;
+  $('replay-date').textContent = longDate(replay.t);
+  $('replay-day').textContent = `Play day ${frame.dayIndex + 1} of ${dates.length}`;
+  const tl = $('timeline');
+  if (tl.__x) {
+    const x = tl.__x(replay.t);
+    tl.querySelector('.scrub').setAttribute('x1', x); tl.querySelector('.scrub').setAttribute('x2', x);
+    tl.querySelector('.scrub-knob').setAttribute('cx', x);
+    tl.querySelectorAll('.tl-bar').forEach(b => b.setAttribute('opacity', +b.dataset.t <= replay.t + 1 ? 1 : 0.35));
+    tl.setAttribute('aria-valuenow', String(frame.dayIndex + 1));
+    tl.setAttribute('aria-valuetext', longDate(replay.t));
+  }
+}
+
+function drawTimeline() {
+  const svg = $('timeline'); svg.replaceChildren();
+  // drawn at its on-screen width so bars, the knob and the dates keep their size on any screen
+  const W = Math.max(280, Math.round(svg.getBoundingClientRect().width) || 1000), H = 92, ml = 12, mr = 12, mt = 10, mb = 22;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.__W = W;
+  const ts = replayTimes(), t0 = ts[0], t1 = Math.max(ts[ts.length - 1], t0 + DAY);
+  const X = t => ml + (W - ml - mr) * (t - t0) / (t1 - t0);
+  svg.__x = X; svg.__t = x => t0 + (Math.max(ml, Math.min(W - mr, x)) - ml) / (W - ml - mr) * (t1 - t0);
+  // plays per day on this play style's charts
+  const counts = new Map();
+  for (const p of data.plays) { const c = catMap.get(p[0]); if (c && c.mode === mode) counts.set(p[4], (counts.get(p[4]) || 0) + 1); }
+  const max = Math.max(1, ...counts.values());
+  const bw = Math.max(3, Math.min(14, (W - ml - mr) / ((t1 - t0) / DAY + 1) * 0.7));
+  el('line', { x1: ml, x2: W - mr, y1: H - mb, y2: H - mb, stroke: 'var(--axis)', 'stroke-width': 1 }, svg);
+  for (const [d, n] of counts) {
+    const x = X(tOf(d)), hgt = Math.max(2, (H - mt - mb) * n / max);
+    const r = el('rect', { x: x - bw / 2, y: H - mb - hgt, width: bw, height: hgt, rx: 2, fill: 'var(--series-1)', class: 'tl-bar' }, svg);
+    r.dataset.t = tOf(d);
+    el('title', {}, r).textContent = `${fmtDate(d)}: ${n} play${n === 1 ? '' : 's'}`;
+  }
+  const first = histData.dates[0], lastD = histData.dates[histData.dates.length - 1];
+  const a = el('text', { x: ml, y: H - 5, class: 'tick' }, svg); a.textContent = fmtDate(first);
+  const b = el('text', { x: W - mr, y: H - 5, 'text-anchor': 'end', class: 'tick' }, svg); b.textContent = fmtDate(lastD);
+  el('line', { class: 'scrub', y1: mt - 4, y2: H - mb, stroke: 'var(--text-primary)', 'stroke-width': 2 }, svg);
+  el('circle', { class: 'scrub-knob', cy: mt - 2, r: 6, fill: 'var(--text-primary)', stroke: 'var(--surface-1)', 'stroke-width': 2 }, svg);
+  svg.setAttribute('aria-valuemin', '1'); svg.setAttribute('aria-valuemax', String(ts.length));
+}
+
+function setReplayTime(t) {
+  const ts = replayTimes();
+  replay.t = Math.max(ts[0], Math.min(ts[ts.length - 1], t));
+  drawReplayFrame();
+}
+function stepDay(dir) {
+  const ts = replayTimes();
+  let i = 0; while (i < ts.length - 1 && ts[i + 1] <= replay.t) i++;
+  const onDay = ts[i] === replay.t;
+  setReplayTime(ts[Math.max(0, Math.min(ts.length - 1, dir > 0 ? i + 1 : (onDay ? i - 1 : i)))]);
+}
+function setPlaying(on) {
+  replay.playing = on;
+  const btn = $('replay-play');
+  btn.replaceChildren(h('span', { 'aria-hidden': 'true', text: on ? '❚❚ ' : '▶ ' }), on ? 'Pause' : 'Play replay');
+  cancelAnimationFrame(replay.raf);
+  if (!on) return;
+  const ts = replayTimes();
+  if (replay.t >= ts[ts.length - 1]) replay.t = ts[0];
+  replay.last = performance.now();
+  const tick = now => {
+    const dt = Math.min(100, now - replay.last); replay.last = now;
+    const end = ts[ts.length - 1];
+    replay.t = Math.min(end, replay.t + dt / 1000 * DAYS_PER_SECOND * replay.speed * DAY);
+    drawReplayFrame();
+    if (replay.t >= end) { setPlaying(false); return; }
+    replay.raf = requestAnimationFrame(tick);
+  };
+  replay.raf = requestAnimationFrame(tick);
+}
+function setReplayOpen(open) {
+  replay.open = open;
+  $('replay-toggle').setAttribute('aria-expanded', String(open));
+  $('replay-body').hidden = !open;
+  if (open) { const ts = replayTimes(); replay.t = ts[ts.length - 1]; }
+  else setPlaying(false);
+  render();
+}
+$('replay-toggle').addEventListener('click', () => setReplayOpen(!replay.open));
+$('replay-play').addEventListener('click', () => setPlaying(!replay.playing));
+$('replay-speed').addEventListener('change', e => { replay.speed = parseFloat(e.target.value) || 1; });
+(() => {
+  const tl = $('timeline');
+  const toT = e => { const r = tl.getBoundingClientRect(); return tl.__t((e.clientX - r.left) * tl.__W / r.width); };
+  tl.addEventListener('pointerdown', e => { replay.dragging = true; setPlaying(false); tl.setPointerCapture(e.pointerId); setReplayTime(toT(e)); });
+  tl.addEventListener('pointermove', e => { if (replay.dragging) setReplayTime(toT(e)); });
+  tl.addEventListener('pointerup', () => { replay.dragging = false; });
+  tl.addEventListener('pointercancel', () => { replay.dragging = false; });
+  tl.addEventListener('keydown', e => {
+    const ts = replayTimes();
+    if (e.key === 'ArrowRight') { e.preventDefault(); setPlaying(false); stepDay(1); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); setPlaying(false); stepDay(-1); }
+    else if (e.key === 'Home') { e.preventDefault(); setPlaying(false); setReplayTime(ts[0]); }
+    else if (e.key === 'End') { e.preventDefault(); setPlaying(false); setReplayTime(ts[ts.length - 1]); }
+    else if (e.key === ' ') { e.preventDefault(); setPlaying(!replay.playing); }
+  });
+})();
+
 function select(s) { selected = s; render(); }
 function setMode(m) { mode = m; selected = null; try { history.replaceState(null, '', '#' + m.toLowerCase()); } catch (e) {} render(); }
 $('btn-single').addEventListener('click', () => setMode('Single'));
@@ -254,6 +392,7 @@ function setStatus(text, kind = '') { const s = $('status'); s.className = 'stat
 
 function recomputeAll() {
   const cat = buildCatalog(data.catalog), disc = discounts(cat);
+  catMap = cat;
   result = compute(cat, data.plays, disc);
   histData = buildHistory(cat, data.plays, disc);
 }
@@ -264,7 +403,7 @@ function show() {
   $('hero').classList.toggle('app-hidden', has);
   $('seg').classList.toggle('app-hidden', !has);
   if (has) { recomputeAll(); render(); }
-  else { document.body.classList.remove('mode-single', 'mode-double'); $('sub').textContent = 'Pump It Up Phoenix 2'; }
+  else { if (replay.open) setReplayOpen(false); document.body.classList.remove('mode-single', 'mode-double'); $('sub').textContent = 'Pump It Up Phoenix 2'; }
   drawDataActions();
 }
 
@@ -340,7 +479,16 @@ async function start() {
     const res = await fetch('data/catalog.json');
     baseCatalog = (await res.json()).charts;
   } catch (e) { setStatus('Could not load the chart data (data/catalog.json).', 'err'); return; }
+  // A build can point at a sample-scores file (used for previews); it is never used once a player loads their own.
+  const sample = document.querySelector('meta[name="sample-scores"]');
   const savedRaw = store.get(STORE);
+  if (!savedRaw && sample) {
+    try {
+      const s = await (await fetch(sample.content)).json();
+      data = { catalog: baseCatalog, plays: s.plays, player: s.player, source: 'sample scores', loadedAt: s.loadedAt, stats: null };
+      setStatus(`Showing sample scores (${s.player}). Load your own above.`);
+    } catch (e) {}
+  }
   if (savedRaw) {
     try {
       const s = JSON.parse(savedRaw);
@@ -355,7 +503,10 @@ async function start() {
   show();
   let lastNarrow = null, rt = null;
   window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => {
-    const nw = $('radar').clientWidth < 520; if (nw !== lastNarrow) { lastNarrow = nw; if (data) render(); } }, 120); });
+    const nw = $('radar').clientWidth < 520;
+    if (nw !== lastNarrow) { lastNarrow = nw; if (data) render(); }
+    else if (data && replay.open) { drawTimeline(); drawReplayFrame(); } }, 120); });
 }
 start();
-window.__skillRadar = { get result() { return result; }, get history() { return histData; }, get data() { return data; } };
+window.__skillRadar = { get result() { return result; }, get history() { return histData; }, get data() { return data; },
+  replayValuesAt: t => replayValues(t).skills, get replay() { return { open: replay.open, playing: replay.playing, t: replay.t }; } };

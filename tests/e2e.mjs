@@ -120,6 +120,57 @@ try {
   check(bad.length === 0 && maxd < 1e-6, `levels match the Python reference (max diff ${maxd.toExponential(1)}${bad.length ? ', mismatched: ' + bad : ''})`);
   if (shots) await pg.screenshot({ path: path.join(shots, 'e2e-loaded.png'), fullPage: true });
 
+  // ---- replay ----
+  await pg.click('#replay-toggle');
+  check(await pg.isVisible('#timeline'), 'replay panel opens');
+  const replayBad = await pg.evaluate(() => {
+    const S = window.__skillRadar, H = S.history, bad = [];
+    H.dates.forEach((d, i) => {
+      const v = S.replayValuesAt(Date.parse(d + 'T00:00:00Z'));
+      for (const sk in v) { const a = v[sk].level, b = H.Double[sk][i];
+        if ((a == null) !== (b == null) || (a != null && Math.abs(a - b) > 1e-9)) bad.push(d + ' ' + sk); }
+    });
+    return bad;
+  });
+  check(replayBad.length === 0, 'replay shows exactly the history values on every play day' + (replayBad.length ? ': ' + replayBad.slice(0, 5) : ''));
+  const endMatches = await pg.evaluate(() => { const S = window.__skillRadar, R = S.result.Double.skills,
+    v = S.replayValuesAt(S.replay.t); return Object.keys(R).every(k => (R[k].level == null) === (v[k].level == null) && (R[k].level == null || Math.abs(R[k].level - v[k].level) < 1e-9)); });
+  check(endMatches, 'replay opens on the current radar');
+  const between = await pg.evaluate(() => {
+    const S = window.__skillRadar, H = S.history, t0 = Date.parse(H.dates[10] + 'T00:00:00Z'), t1 = Date.parse(H.dates[11] + 'T00:00:00Z');
+    const mid = S.replayValuesAt((t0 + t1) / 2);
+    return Object.keys(mid).every(k => { const a = H.Double[k][10], b = H.Double[k][11], m = mid[k].level;
+      if (a == null || b == null) return true; return m >= Math.min(a, b) - 1e-9 && m <= Math.max(a, b) + 1e-9; });
+  });
+  check(between, 'in-between frames sit between the neighbouring days');
+  await pg.focus('#timeline'); await pg.keyboard.press('Home');
+  check(/Play day 1 of \d+/.test(await pg.textContent('#replay-day')), 'Home jumps to the first play day');
+  await pg.keyboard.press('ArrowRight'); await pg.keyboard.press('ArrowRight');
+  check(/Play day 3 of/.test(await pg.textContent('#replay-day')), 'arrow keys step between play days');
+  const labelsOk = await pg.evaluate(() => {
+    const S = window.__skillRadar, H = S.history, vals = [...document.querySelectorAll('#radar .ax-val')].map(t => t.textContent);
+    const names = [...document.querySelectorAll('#radar .ax-name')].map(t => t.textContent);
+    return names.every((n, i) => { const v = H.Double[n][2]; return v == null ? vals[i] === '—' : vals[i] === v.toFixed(1); });
+  });
+  check(labelsOk, 'radar labels show that day\u2019s levels');
+  if (shots) await pg.screenshot({ path: path.join(shots, 'e2e-replay-day3.png'), fullPage: false });
+  await pg.selectOption('#replay-speed', '4');
+  const before = await pg.innerHTML('#radar');
+  await pg.click('#replay-play');
+  await pg.waitForTimeout(700);
+  const midState = await pg.evaluate(() => window.__skillRadar.replay);
+  const during = await pg.innerHTML('#radar');
+  check(midState.playing && during !== before, 'Play animates the radar');
+  if (shots) await pg.screenshot({ path: path.join(shots, 'e2e-replay-playing.png'), fullPage: false });
+  await pg.waitForFunction(() => !window.__skillRadar.replay.playing, null, { timeout: 20000 });
+  const lastDay = await pg.evaluate(() => { const H = window.__skillRadar.history; return H.dates.length; });
+  check(new RegExp(`Play day ${lastDay} of ${lastDay}`).test(await pg.textContent('#replay-day')), 'playback stops on the last play day');
+  await pg.click('#btn-single');
+  check(/Play day/.test(await pg.textContent('#replay-day')), 'switching to Single keeps the replay working');
+  await pg.click('#btn-double');
+  await pg.click('#replay-toggle');
+  check(!(await pg.isVisible('#timeline')), 'replay panel closes');
+
   await pg.reload();
   await pg.waitForSelector('#app:not(.app-hidden)');
   check(/Showing .* from PIU Scores/.test(await pg.textContent('#status')), 'scores reload from this device after a refresh');

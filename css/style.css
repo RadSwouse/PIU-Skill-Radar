@@ -170,3 +170,29 @@ a:hover { color: var(--series-1); }
 .btn.primary { color: var(--on-series); }
 .btn:disabled { opacity: .6; cursor: progress; }
 input[type="checkbox"] { accent-color: var(--series-1); }
+
+/* replay */
+.replay { margin-bottom: 16px; padding: 12px; }
+.replay-toggle {
+  width: 100%; font: inherit; font-size: 16px; font-weight: 700; border: 0; border-radius: 10px; cursor: pointer;
+  padding: 12px 16px; background: var(--series-1); color: var(--on-series);
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+}
+.replay-toggle:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+.replay-toggle .chev { display: inline-block; transition: transform .15s; font-size: 20px; line-height: 1; }
+.replay-toggle[aria-expanded="true"] .chev { transform: rotate(90deg); }
+#replay-body { padding: 10px 6px 4px; }
+.replay-hint { margin: 2px 0 8px; text-align: center; color: var(--text-secondary); font-size: 13.5px; }
+#timeline { width: 100%; height: auto; display: block; cursor: ew-resize; touch-action: none;
+  background: var(--page); border: 1px solid var(--border); border-radius: 10px; }
+#timeline:focus-visible { outline: 2px solid var(--series-1); outline-offset: 2px; }
+#timeline .tick { font-size: 12px; fill: var(--muted); }
+.replay-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; }
+.replay-k { color: var(--muted); font-size: 12.5px; text-transform: uppercase; letter-spacing: .04em; }
+.replay-date { font-size: 24px; font-weight: 700; line-height: 1.25; }
+.replay-controls { display: flex; align-items: center; gap: 12px; }
+.replay-play { font-size: 15px; padding: 9px 18px; min-width: 150px; }
+.replay-speed { font-size: 14px; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 6px; }
+.replay-speed select { font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--axis);
+  background: var(--surface-1); color: var(--text-primary); }
+@media (max-width: 520px) { .replay-date { font-size: 19px; } .replay-controls { width: 100%; justify-content: space-between; } }

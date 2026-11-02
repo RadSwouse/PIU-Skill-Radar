@@ -2,7 +2,8 @@
 
 A skill radar for Pump It Up Phoenix 2. Each technique (Run, Twist, Bracket, Drill, Half, …) gets a decimal
 level, like **Lv.20.7**, based on the hardest charts with that tech you've cleared and how well you scored on
-them. It also shows how each level changed over time.
+them. It also shows how each level changed over time, and **Watch radar progress over time** replays
+the whole radar day by day: drag the timeline or press **Play replay** and the shape grows as your scores improve.
 
 - **Doubles:** 16 techs: Run, Twist, Hi-Angle, Crossover, Half, Bracket, Drill, Stamina, Hold, Fast, Jack, Jump, Stairs, Switch, Leg split, Side
 - **Singles:** 12 techs: Run, Twist, Hi-Angle, Side, Bracket, Drill, Stamina, Hold, Fast, Jack, Jump, Stairs
@@ -39,7 +40,7 @@ Only Phoenix 2 clears count. Stage breaks and unknown scores are ignored. The ru
 index.html               page
 css/style.css            styles (light and dark)
 js/engine.js             scoring engine (no DOM)
-js/app.js                radar, list, detail table, history chart, data loading
+js/app.js                radar, list, detail table, history chart, replay, data loading
 js/sources/piuscores.js  PIU Scores API client + chart matching
 js/sources/arcadestat.js ArcadeStat HAR / JSON reader
 data/catalog.json        ArcadeStat tags + tier votes for every Phoenix 2 Single/Double chart
