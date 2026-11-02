@@ -269,11 +269,11 @@ function outlineCrossing(H, i, k, skills, lo, hi) {
   const cross = (a, b) => a[0] * b[1] - a[1] * b[0], den = cross(d, E);
   if (Math.abs(den) > 1e-12) {
     const dist = cross(P, E) / den, tt = cross(P, d) / den;   // ray length, position along the edge
-    if (dist >= 0 && tt >= -1e-9 && tt <= 1 + 1e-9) return lo + dist * span;
+    if (dist > 1e-9 && tt >= -1e-9 && tt <= 1 + 1e-9) return lo + dist * span;
   }
-  // the neighbours span half the circle or more: blend their radii by angle instead
-  const gap = (a, b) => ((b - a + n) % n) || n, w = gap(p, k) / (gap(p, k) + gap(k, q));
-  return lo + (r1 + (r2 - r1) * w) * span;
+  // The outline meets this spoke at the centre or behind it (its rated neighbours are half the
+  // circle or more apart), so the skill grows out from the centre.
+  return lo;
 }
 
 // Radar values at time t: exact on each play day, eased between them. A skill that gets its first

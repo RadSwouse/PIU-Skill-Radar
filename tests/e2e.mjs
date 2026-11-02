@@ -167,15 +167,17 @@ try {
       const P = pt(p, H[mode][names[p]][i]), Q = pt(q, H[mode][names[q]][i]), X = pt(k, v0);
       const cross = (Q[0] - P[0]) * (X[1] - P[1]) - (Q[1] - P[1]) * (X[0] - P[0]);
       if (gapSum < n / 2) { if (Math.abs(cross) < 1e-4) onLine++; else bad.push(`${H.dates[i]} ${sk} off the outline`); }
+      else if (Math.abs(v0 - lo) > 1e-3) bad.push(`${H.dates[i]} ${sk} should start at the centre (started at ${v0.toFixed(2)})`);
+      if (Math.abs(b - v0) > 0.05 && Math.abs(vm - v0) < 1e-6) bad.push(`${H.dates[i]} ${sk} does not move`);
       if (!(vm >= Math.min(v0, b) - 1e-9 && vm <= Math.max(v0, b) + 1e-9)) bad.push(`${H.dates[i]} ${sk} overshoots`);
     });
     return { events, onLine, bad };
   });
   const dApp = await appearCheck();
-  check(dApp.events > 0 && dApp.bad.length === 0, `Double: new skills start on the outline and move to their level (${dApp.onLine}/${dApp.events} on an edge)${dApp.bad.length ? ': ' + dApp.bad.slice(0, 4) : ''}`);
+  check(dApp.events > 0 && dApp.bad.length === 0, `Double: new skills start on the outline and move to their level (${dApp.onLine} on an edge, ${dApp.events - dApp.onLine} from the centre)${dApp.bad.length ? ': ' + dApp.bad.slice(0, 4) : ''}`);
   await pg.click('#btn-single');
   const sApp = await appearCheck();
-  check(sApp.events > 0 && sApp.bad.length === 0, `Single: new skills start on the outline and move to their level (${sApp.onLine}/${sApp.events} on an edge)${sApp.bad.length ? ': ' + sApp.bad.slice(0, 4) : ''}`);
+  check(sApp.events > 0 && sApp.bad.length === 0, `Single: new skills start on the outline and move to their level (${sApp.onLine} on an edge, ${sApp.events - sApp.onLine} from the centre)${sApp.bad.length ? ': ' + sApp.bad.slice(0, 4) : ''}`);
   await pg.click('#btn-double');
 
   await pg.focus('#timeline'); await pg.keyboard.press('Home');
