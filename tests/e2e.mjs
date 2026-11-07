@@ -20,6 +20,7 @@ const API = 'https://piuscores.arroweclip.se/api/v2';
 const catalog = JSON.parse(fs.readFileSync(catalogPath, 'utf8')).charts;
 const records = JSON.parse(fs.readFileSync(recordsPath, 'utf8')).list.filter(p => !p.isUnknownScore);
 const expected = JSON.parse(fs.readFileSync(expectedPath, 'utf8'));
+const expectedBase = expected.base; delete expected.base;   // ArcadeStat tags only (supplement switched off)
 
 // ---- mock data ----
 const guid = id => `00000000-0000-4000-8000-${String(id).padStart(12, '0')}`;
@@ -119,6 +120,35 @@ try {
   }
   check(bad.length === 0 && maxd < 1e-6, `levels match the Python reference (max diff ${maxd.toExponential(1)}${bad.length ? ', mismatched: ' + bad : ''})`);
   if (shots) await pg.screenshot({ path: path.join(shots, 'e2e-loaded.png'), fullPage: true });
+
+  // ---- tag supplement: public view has no developer tools ----
+  check(!(await pg.isVisible('#supp-row')) && await pg.locator('#radar .base-outline').count() === 0, 'public view: no tag switch or comparison outline');
+  await pg.locator('.row', { hasText: 'Side' }).first().click();
+  check(await pg.locator('#detail .added-pill').count() === 0 && await pg.locator('#list .delta').count() === 0, 'public view: no added markers or deltas');
+  await pg.goto(base + '?dev'); await pg.waitForSelector('#radar polygon');
+  check(await pg.isVisible('#supp-row'), '?dev shows the tag switch');
+  const cmp = (exp, which) => pg.evaluate(([exp, which]) => { const R = window.__skillRadar[which]; if (!R) return { maxd: NaN, bad: ['missing'] };
+    let maxd = 0; const bad = [];
+    for (const m in exp) for (const s in exp[m]) { const a = exp[m][s], b = R[m].skills[s].level;
+      if ((a == null) !== (b == null)) bad.push(m + ' ' + s); else if (a != null) maxd = Math.max(maxd, Math.abs(a - b)); }
+    return { maxd, bad }; }, [exp, which]);
+  let c1 = await cmp(expectedBase, 'baseResult');
+  check(c1.bad.length === 0 && c1.maxd < 1e-6, `ArcadeStat-only levels match the reference (max diff ${c1.maxd})`);
+  check(await pg.locator('#radar .base-outline').count() === 1, 'dashed ArcadeStat-only outline is drawn');
+  check(await pg.isVisible('#supp-legend'), 'legend shown while added tags are on');
+  await pg.locator('.row', { hasText: 'Side' }).first().click();
+  check(await pg.locator('#detail .added-pill').count() > 0, 'added tags are marked in the detail table');
+  check(await pg.locator('#list .delta').count() > 0, 'skill list shows changes against ArcadeStat-only levels');
+  await pg.uncheck('#supp-on');
+  c1 = await cmp(expectedBase, 'result');
+  check(c1.bad.length === 0 && c1.maxd < 1e-6, 'switching added tags off gives the ArcadeStat-only levels');
+  check(await pg.locator('#radar .base-outline').count() === 0 && !(await pg.isVisible('#supp-legend')), 'outline and legend hidden when off');
+  check(await pg.locator('#detail .added-pill').count() === 0 && await pg.locator('#list .delta').count() === 0, 'no added markers when off');
+  await pg.reload(); await pg.waitForSelector('#radar polygon');
+  check(!(await pg.isChecked('#supp-on')), 'the switch setting is remembered');
+  await pg.check('#supp-on');
+  c1 = await cmp(expected, 'result');
+  check(c1.bad.length === 0 && c1.maxd < 1e-6, 'switching back on restores the supplemented levels');
 
   // ---- replay ----
   await pg.click('#replay-toggle');

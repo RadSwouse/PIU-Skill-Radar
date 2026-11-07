@@ -25,7 +25,7 @@
     <p>Load your Phoenix 2 scores below. Each technique gets a decimal level based on the hardest charts with that tech you've cleared, and how well you scored on them.</p>
   </div>
 
-  <div id="app">
+  <div id="app" class="app-hidden">
     <div class="card replay" id="replay">
       <button type="button" class="replay-toggle" id="replay-toggle" aria-expanded="false" aria-controls="replay-body">
         <span class="chev" aria-hidden="true">›</span> Watch radar progress over time
@@ -54,6 +54,10 @@
       <div class="card radar-card" id="radar-card">
         <svg id="radar" viewBox="0 0 560 540" role="img" aria-labelledby="radar-title"><title id="radar-title">Skill radar</title></svg>
         <div class="tip" id="tip" role="status"></div>
+        <div class="supp-row" id="supp-row" hidden>
+          <label class="check"><input type="checkbox" id="supp-on" checked> Add Arrow Eclipse tags</label>
+          <span class="legend" id="supp-legend"><span class="key solid"></span>With added tags <span class="key dash"></span>ArcadeStat tags only</span>
+        </div>
       </div>
       <div class="card list-card">
         <div class="list-head"><span>Skill</span><span id="list-level-head">Level</span></div>
@@ -89,9 +93,9 @@
         <li><b>Score adjustment</b> = weighted around SS ±0 (SSS+ = +0.15 … A = −1.6).</li>
         <li><b>Side-tech discount</b>: a chart counts lower for a tech it only has a little of. Value = level + adjustment − discount × (1 − tech share), where share is the tech's vote weight divided by the chart's top tag. The discount is 3 levels for common techs and smaller for rare ones (3 × tagged Lv18+ charts ÷ 50).</li>
         <li><b>Your level</b> = weighted average of your best values filling 10 slots. A value above 22 fills extra slots (1 + every level above 22), so hard clears weigh more.</li>
-        <li>A skill appears once you have <b>5 qualifying clears</b>: charts where the tech is at least 25% of the top tag (any amount for rare techs).</li>
+        <li>A skill appears once you have <b>5 qualifying clears</b>: charts where the tech is at least 25% of the top tag (any amount for rare techs or added tags).</li>
       </ol>
-      <p style="font-size:13px">Technique tags and tier votes come from the <a href="https://arcadestat.app" target="_blank" rel="noopener">ArcadeStat</a> community. Scores come from <a href="https://piuscores.arroweclip.se" target="_blank" rel="noopener">PIU Scores</a> or your ArcadeStat export. Clears only; stage breaks don't count.</p>
+      <p style="font-size:13px">Technique tags and tier votes come from the <a href="https://arcadestat.app" target="_blank" rel="noopener">ArcadeStat</a> community, with extra tags where voters left a tech out, from <a href="https://piuscores.arroweclip.se" target="_blank" rel="noopener">PIU Scores</a> skill data and this site's own step-pattern analysis. Scores come from PIU Scores or your ArcadeStat export. Clears only; stage breaks don't count.</p>
     </div>
   </div>
 </div>

@@ -40,18 +40,25 @@ export function scoreAdj(s) {
 }
 
 // compact rows: [stepId, title, chart, tierVote, deleted, tagIndexes, tagWeights]
-export function buildCatalog(rows) {
+// supp (optional): data/supplement.json charts, {stepId: [[tag, share, source]]}. A supplemented tag only fills a
+// tech ArcadeStat voters left out; its share is fixed and it always counts as a qualifying clear.
+export function buildCatalog(rows, supp) {
   const cat = new Map();
   for (const [id, title, chart, vote, deleted, idx, w] of rows) {
     const level = parseInt(chart.slice(1), 10);
     const tags = {};
     idx.forEach((i, k) => { if (w[k] > 0 && i < TAGS.length) tags[TAGS[i]] = w[k]; });
     cat.set(id, { id, title, chart, mode: chart[0] === 'S' ? 'Single' : 'Double', level,
-                  clevel: level + (vote || 0), tags, deleted: !!deleted });
+                  clevel: level + (vote || 0), tags, added: {}, deleted: !!deleted });
+  }
+  if (supp) for (const [id, list] of Object.entries(supp)) {
+    const c = cat.get(Number(id)) || cat.get(id);
+    if (c) for (const [t, r, src] of list) if (!(t in c.tags)) c.added[t] = { r, src };
   }
   return cat;
 }
 
+// Rarity is counted from ArcadeStat votes only, so supplemented tags never change a tech's discount.
 export function discounts(cat) {
   const out = {};
   for (const mode of Object.keys(SPOKES)) for (const sk of SPOKES[mode]) {
@@ -83,13 +90,16 @@ export function compute(cat, plays, disc) {
     for (const sk of SPOKES[mode]) {
       const t = tagOf(sk), { a, rare, n18 } = disc[mode + '|' + sk], vals = [];
       for (const [c, b] of clears) {
-        if (!(t in c.tags)) continue;
-        const top = Math.max(...Object.values(c.tags)), r = c.tags[t] / top, adj = scoreAdj(b.score);
+        let r, added = null;
+        if (t in c.tags) r = c.tags[t] / Math.max(...Object.values(c.tags));
+        else if (c.added && t in c.added) { r = c.added[t].r; added = c.added[t].src; }
+        else continue;
+        const adj = scoreAdj(b.score);
         vals.push({ id: c.id, chart: c.chart, title: c.title, score: b.score, grade: grade(b.score),
-                    clevel: c.clevel, adj, share: r, value: c.clevel + adj - a * (1 - r) });
+                    clevel: c.clevel, adj, share: r, added, value: c.clevel + adj - a * (1 - r) });
       }
       vals.sort((x, y) => y.value - x.value);
-      const qualList = vals.filter(d => rare || d.share >= MAIN_SHARE - 1e-3), qual = qualList.length;
+      const qualList = vals.filter(d => rare || d.added || d.share >= MAIN_SHARE - 1e-3), qual = qualList.length;
       let filled = 0, acc = 0; const used = [];
       for (const d of vals) {
         if (filled >= SLOTS) break;

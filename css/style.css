@@ -196,3 +196,13 @@ input[type="checkbox"] { accent-color: var(--series-1); }
 .replay-speed select { font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--axis);
   background: var(--surface-1); color: var(--text-primary); }
 @media (max-width: 520px) { .replay-date { font-size: 19px; } .replay-controls { width: 100%; justify-content: space-between; } }
+
+/* tag supplement */
+.supp-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 4px 6px 2px; }
+.legend { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+.legend .key { display: inline-block; width: 18px; height: 0; border-top: 2px solid var(--series-1); margin-left: 6px; }
+.legend .key.dash { border-top: 2px dashed var(--text-secondary); }
+.row .lv .delta { font-size: 12px; font-weight: 600; color: var(--muted); margin-left: 6px; }
+.added-pill { display: inline-block; margin-left: 6px; padding: 0 5px; border-radius: 4px; font-size: 11px; font-weight: 600;
+  line-height: 16px; color: var(--series-1); background: var(--wash); vertical-align: 1px; }
+.legend[hidden], .supp-row[hidden] { display: none; }

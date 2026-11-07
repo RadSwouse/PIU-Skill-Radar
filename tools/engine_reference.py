@@ -57,6 +57,16 @@ def build_catalog(song_all):
     return cat
 
 
+def add_supplement(cat, supp):
+    """supp: data/supplement.json 'charts'. Fills only techs ArcadeStat voters left out; shares are fixed.
+    Rarity (discounts) keeps counting ArcadeStat tags only."""
+    for k, lst in supp.items():
+        c = cat.get(int(k))
+        if c:
+            c['added'] = {t: (r, src) for t, r, src in lst if t not in c['tags']}
+    return cat
+
+
 def discounts(cat):
     out = {}
     for mode, spokes in SPOKES.items():
@@ -91,15 +101,19 @@ def compute(cat, records):
             a, rare, n18 = disc[(mode, sk)]
             vals = []
             for c, b in clears:
-                if t not in c['tags']:
+                added = None
+                if t in c['tags']:
+                    r = c['tags'][t] / max(c['tags'].values())
+                elif t in c.get('added', {}):
+                    r, added = c['added'][t]
+                else:
                     continue
-                r = c['tags'][t] / max(c['tags'].values())
                 adj = score_adj(b['score'])
                 vals.append(dict(id=c['id'], chart=c['chart'], title=c['title'], score=b['score'],
-                                 grade=grade(b['score']), clevel=c['clevel'], adj=adj, share=r,
+                                 grade=grade(b['score']), clevel=c['clevel'], adj=adj, share=r, added=added,
                                  value=c['clevel'] + adj - a * (1 - r)))
             vals.sort(key=lambda d: -d['value'])
-            qual = sum(1 for d in vals if rare or d['share'] >= MAIN_SHARE - 1e-3)
+            qual = sum(1 for d in vals if rare or d['added'] or d['share'] >= MAIN_SHARE - 1e-3)
             used, filled, acc = [], 0.0, 0.0
             for d in vals:
                 if filled >= SLOTS:
@@ -115,12 +129,14 @@ def compute(cat, records):
 
 
 if __name__ == '__main__':
-    # python3 tools/engine_reference.py data/catalog.json <arcadestat record/all JSON>
+    # python3 tools/engine_reference.py data/catalog.json <arcadestat record/all JSON> [data/supplement.json]
     import sys
     rows = json.load(open(sys.argv[1], encoding='utf-8'))['charts']
     cat = {r[0]: dict(id=r[0], title=r[1], chart=r[2], mode='Single' if r[2][0] == 'S' else 'Double', level=int(r[2][1:]),
                       clevel=int(r[2][1:]) + (r[3] or 0.0), tags={UI[i]: v for i, v in zip(r[5], r[6])}, deleted=bool(r[4]))
            for r in rows}
+    if len(sys.argv) > 3:
+        add_supplement(cat, json.load(open(sys.argv[3], encoding='utf-8'))['charts'])
     rec = json.load(open(sys.argv[2], encoding='utf-8'))['list']
     for mode, d in compute(cat, rec).items():
         print(mode)

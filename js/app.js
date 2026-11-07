@@ -3,9 +3,13 @@ import { SPOKES, MIN_CLEARS, buildCatalog, discounts, compute, buildHistory } fr
 import { importFromPiuScores, PiuScoresError } from './sources/piuscores.js';
 import { readArcadeStatFile } from './sources/arcadestat.js';
 
-const STORE = 'skillRadar.v2', TOKEN_KEY = 'skillRadar.piuToken';
+const STORE = 'skillRadar.v2', TOKEN_KEY = 'skillRadar.piuToken', SUPP_KEY = 'skillRadar.supplement';
 let baseCatalog = null;                 // data/catalog.json rows
 let data = null;                        // { catalog, plays, player, source, loadedAt, stats }
+let supp = null;                        // data/supplement.json charts, or null
+// ?dev shows the developer tools: the added-tags switch, the ArcadeStat-only outline, deltas and "added" markers.
+const DEV = (() => { try { return new URLSearchParams(location.search).has('dev'); } catch (e) { return false; } })();
+let useSupp = true, baseResult = null;  // baseResult: ArcadeStat-only levels, for the before/after outline
 let result = null, histData = null, histOpen = false, mode = 'Double', selected = null;
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -88,6 +92,12 @@ function drawRadar(res, skills, inReplay = false) {
     const pts = idx.map(i => pt(i, rad(res.skills[skills[i]].level)).map(x => x.toFixed(1)).join(',')).join(' ');
     el('polygon', { points: pts, fill: 'var(--series-1-fill)', stroke: 'var(--series-1)', 'stroke-width': 2, 'stroke-linejoin': 'round' }, svg);
   }
+  if (baseResult && !inReplay) {
+    const b = baseResult[mode].skills, bi = skills.map((s, i) => i).filter(i => b[skills[i]].level != null);
+    if (bi.length >= 3) el('polygon', { points: bi.map(i => pt(i, rad(b[skills[i]].level)).map(x => x.toFixed(1)).join(',')).join(' '),
+      fill: 'none', stroke: 'var(--text-secondary)', 'stroke-width': 1.5, 'stroke-dasharray': '5 4', 'stroke-linejoin': 'round',
+      class: 'base-outline' }, svg);
+  }
   // vertices + hit areas
   const tip = $('tip'), card = $('radar-card');
   idx.forEach(i => {
@@ -131,6 +141,12 @@ function drawList(res, skills) {
                          onclick: () => select(s), onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(s); } } },
       h('span', { class: 'name', text: s }),
       h('span', { class: 'lv', text: off ? '—' : 'Lv.' + fmt(d.level, 1) }));
+    const b = baseResult && !replay.open ? baseResult[mode].skills[s].level : undefined;
+    if (b !== undefined && !off) {
+      const dv = b == null ? null : Math.round(d.level * 10) / 10 - Math.round(b * 10) / 10;
+      const txt = b == null ? 'new' : Math.abs(dv) < 0.05 ? '' : (dv > 0 ? '+' : '−') + fmt(Math.abs(dv), 1);
+      if (txt) r.lastChild.appendChild(h('span', { class: 'delta', text: txt, title: b == null ? 'Not shown with ArcadeStat tags only' : `ArcadeStat tags only: Lv.${fmt(b, 1)}` }));
+    }
     list.appendChild(r);
   };
   shown.forEach(s => row(s, false));
@@ -152,7 +168,8 @@ function drawDetail(res) {
       .map((t, i) => h('th', { class: i >= 2 && i !== 3 ? 'num' : '', text: t })));
     const tbody = h('tbody');
     const line = (u, grey) => tbody.appendChild(h('tr', { class: grey ? 'extra' : '' },
-      h('td', { text: u.chart }), h('td', { class: 'song', text: u.title }),
+      h('td', { text: u.chart }), h('td', { class: 'song' }, u.title, u.added && DEV ? h('span', { class: 'added-pill',
+        title: u.added === 'ae' ? 'Tag added from Arrow Eclipse (PIU Scores) data' : 'Tag added from step-pattern analysis', text: 'added' }) : null),
       h('td', { class: 'num', text: fmtScore(u.score) }), h('td', { text: u.grade }),
       h('td', { class: 'num', text: fmt(u.clevel, 2) }), h('td', { class: 'num', text: (u.adj >= 0 ? '+' : '') + fmt(u.adj, 2) }),
       h('td', { class: 'num', text: Math.round(u.share * 100) + '%' }), h('td', { class: 'num', text: fmt(u.value, 2) })));
@@ -417,9 +434,11 @@ const store = {
 function setStatus(text, kind = '') { const s = $('status'); s.className = 'status' + (kind ? ' ' + kind : ''); s.textContent = text; }
 
 function recomputeAll() {
-  const cat = buildCatalog(data.catalog), disc = discounts(cat);
+  const base = buildCatalog(data.catalog), disc = discounts(base);   // rarity always from ArcadeStat votes
+  const on = !!(supp && useSupp), cat = on ? buildCatalog(data.catalog, supp) : base;
   catMap = cat;
   result = compute(cat, data.plays, disc);
+  baseResult = on && DEV ? compute(base, data.plays, disc) : null;
   histData = buildHistory(cat, data.plays, disc);
 }
 
@@ -501,10 +520,20 @@ $('file').addEventListener('change', e => { const f = e.target.files[0]; if (f) 
 // ---------- start ----------
 async function start() {
   mode = location.hash === '#single' ? 'Single' : 'Double';
+  const suppReq = fetch('data/supplement.json').then(r => r.json()).then(j => j.charts).catch(() => null);
   try {
     const res = await fetch('data/catalog.json');
     baseCatalog = (await res.json()).charts;
   } catch (e) { setStatus('Could not load the chart data (data/catalog.json).', 'err'); return; }
+  supp = await suppReq;
+  if (supp && DEV) {
+    useSupp = store.get(SUPP_KEY) !== '0';
+    $('supp-on').checked = useSupp; $('supp-row').hidden = false; $('supp-legend').hidden = !useSupp;
+    $('supp-on').addEventListener('change', e => {
+      useSupp = e.target.checked; store.set(SUPP_KEY, useSupp ? '1' : '0'); $('supp-legend').hidden = !useSupp;
+      if (data && data.plays && data.plays.length) { recomputeAll(); render(); }
+    });
+  }
   // A build can point at a sample-scores file (used for previews); it is never used once a player loads their own.
   const sample = document.querySelector('meta[name="sample-scores"]');
   const savedRaw = store.get(STORE);
@@ -534,5 +563,5 @@ async function start() {
     else if (data && replay.open) { drawTimeline(); drawReplayFrame(); } }, 120); });
 }
 start();
-window.__skillRadar = { get result() { return result; }, get history() { return histData; }, get data() { return data; },
+window.__skillRadar = { get result() { return result; }, get baseResult() { return baseResult; }, get history() { return histData; }, get data() { return data; },
   replayValuesAt: t => replayValues(t).skills, scale: () => radarScale(), get replay() { return { open: replay.open, playing: replay.playing, t: replay.t }; } };
